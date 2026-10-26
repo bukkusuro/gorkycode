@@ -1,0 +1,16 @@
+export const assistantIntents = [
+  'create_task',
+  'create_meeting',
+  'create_event',
+  'create_recurrence',
+  'list_events',
+  'search_events',
+  'update_event',
+  'delete_event',
+  'complete_task',
+  'reopen_task',
+  'open_event',
+  'confirm_action',
+  'cancel_action',
+  'answer_question',
+] as const;
