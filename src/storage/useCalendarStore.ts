@@ -4,6 +4,7 @@ import { importCsv } from '../importCsv';
 import { ENTRY_KEY, type Preferences, loadPreferences, loadRecords, writeJSON } from '../model';
 import { applyTypeColors, completePastTasks, importedEntriesAtTime } from '../recordUpdates';
 import { undoPreferences } from './history';
+import { trackCompletion } from '../planning/analytics';
 function initialRecords() {
   try {
     return { records: loadRecords(), error: '' };
@@ -39,7 +40,7 @@ export function useCalendarStore(setNotice: (text: string) => void) {
     }
   }, []);
   const commit = useCallback(
-    (next: unknown[], nextPrefs = prefs, track = true) => {
+    (next: unknown[], nextPrefs = prefs, track = true, trackActivity = true) => {
       if (initial.error) {
         setNotice(initial.error);
         return false;
@@ -60,6 +61,7 @@ export function useCalendarStore(setNotice: (text: string) => void) {
         if (raw !== null && !localStorage.getItem('voicetask.entries.backup.v1'))
           localStorage.setItem('voicetask.entries.backup.v1', raw);
         const previousPrefs = localStorage.getItem('voicetask.preferences.v2');
+        if (trackActivity && track) next = trackCompletion(records, next);
         const nextJSON = JSON.stringify(next);
         try {
           if (nextPrefs !== prefs) writeJSON('voicetask.preferences.v2', nextPrefs);
@@ -101,7 +103,7 @@ export function useCalendarStore(setNotice: (text: string) => void) {
     setNotice('Последнее изменение отменено');
   }
   function restore(records: unknown[], preferences: Preferences) {
-    if (!commit(records, preferences)) return false;
+    if (!commit(records, preferences, true, false)) return false;
     setNotice('Резервная копия восстановлена');
     return true;
   }

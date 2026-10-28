@@ -7,14 +7,17 @@ import {
   type ChatMessage as Message,
   restoreContext,
 } from '../assistantTypes';
-import type { Entry } from '../calendar';
+import { type Entry, validEntry } from '../calendar';
 import { type Preferences, readJSON } from '../model';
 import { useVoice } from '../useVoice';
 import { type DraftStep, editDraft, hasDraft, restoreStep } from './draft';
+import { applyPlan, type PlanProposal } from '../planning/plan';
+import type { Outcome } from '../assistantEngine';
 export type ChatOptions = {
   records: unknown[];
   entries: Entry[];
   prefs: Preferences;
+  selectedDay: string;
   commit: (records: unknown[]) => boolean;
   persist: (key: string, value: unknown) => boolean;
   onResults: (entries: Entry[]) => void;
@@ -62,6 +65,7 @@ export function useAssistantChat({
     restoreContext(readJSON('voicetask.context.v1', {}), entries),
   );
   const context = useRef<Context>(initialContext);
+  const [proposal, setProposal] = useState<PlanProposal | null>(null);
   const activeRequest = useRef<{ controller: AbortController; text: string } | null>(null);
   const steps = useRef<DraftStep[]>([]);
   const [conversationId, setConversationId] = useState(() => {
@@ -86,8 +90,9 @@ export function useAssistantChat({
       [...messages].reverse().find((message) => message.role === 'assistant')?.text || '';
     return { context: structuredClone(context.current), question };
   }
-  async function sendMessage(request?: string, numericChoiceId?: string) {
+  async function sendMessage(request?: string, numericChoiceId?: string, proposalId?: string) {
     if (activeRequest.current) return;
+    if (proposalId && proposal?.id !== proposalId) return;
     const numeric = context.current.numeric;
     if (
       numericChoiceId &&
@@ -126,28 +131,55 @@ export function useAssistantChat({
         at: new Date().toISOString(),
       });
       const previous = snapshot();
-      const result = await processRequest(
-        (value, state, preferences, now) =>
-          interpretAssistant(
-            value,
-            state,
-            preferences,
-            now,
-            messages,
-            entries,
-            conversationId,
-            requestId,
-            current.controller.signal,
-          ),
+      const confirmation = /^(?:да|подтверждаю|применить план|добавить все)[.!]?$/iu.test(
         current.text,
-        records,
-        context.current,
-        prefs,
-        requestId,
       );
+      const cancellation = /^(?:нет|отмена|отменить план|не нужно)[.!]?$/iu.test(current.text);
+      const confirmed = () => {
+        const next = applyPlan(proposal!, records, prefs);
+        const original = new Map(
+          records.filter(validEntry).map((entry) => [entry.id, JSON.stringify(entry)]),
+        );
+        return {
+          reply:
+            'План применён. Все изменения можно отменить кнопкой «Отменить последнее действие».',
+          context: {},
+          records: next,
+          entries: next
+            .filter(validEntry)
+            .filter(
+              (entry) => !entry.recurrence && original.get(entry.id) !== JSON.stringify(entry),
+            ),
+        };
+      };
+      const result: Outcome =
+        proposal && (confirmation || cancellation)
+          ? cancellation
+            ? { reply: 'План отменён. Записи не изменены.', context: {} }
+            : confirmed()
+          : await processRequest(
+              (value, state, preferences, now) =>
+                interpretAssistant(
+                  value,
+                  state,
+                  preferences,
+                  now,
+                  messages,
+                  entries,
+                  conversationId,
+                  requestId,
+                  current.controller.signal,
+                ),
+              current.text,
+              records,
+              context.current,
+              prefs,
+              requestId,
+            );
       current.controller.signal.throwIfAborted();
       if (result.records && !commit(result.records))
         throw Error('Запись не сохранена. Проверьте доступность хранилища и повторите запрос.');
+      setProposal(result.proposal || null);
       if (result.records || !hasDraft(result.context)) steps.current = [];
       else if (hasDraft(previous.context)) remember(previous);
       updateContext(result.context);
@@ -158,6 +190,7 @@ export function useAssistantChat({
         at: new Date().toISOString(),
         entryIds: result.entries?.map((entry) => entry.id),
         numericChoiceId: result.numericChoiceId,
+        proposalId: result.proposal?.id,
       });
       if (result.records && result.entries?.[0]) onResults(result.entries);
       if (result.openId) onOpenEntry(result.openId);
@@ -196,6 +229,7 @@ export function useAssistantChat({
       setMessages(greeting);
       setChatBlocked(false);
       updateContext({});
+      setProposal(null);
       steps.current = [];
       setConversationId(crypto.randomUUID());
       setClearChat(false);
@@ -255,5 +289,6 @@ export function useAssistantChat({
     revise,
     canBack: steps.current.length > 0,
     canRevise: !!context.current.pending?.intent.startsWith('create'),
+    proposal,
   };
 }

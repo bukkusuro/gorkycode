@@ -3,12 +3,13 @@ import {
   guardCalendarRequest,
   guardCalendarResponse,
   normalizeCalendarText,
+  planningRequest,
 } from './assistantPolicy.js';
 import { type ChatMessage, type Context, validateCommand } from './assistantTypes.js';
 import type { Entry } from './calendar.js';
 import { interpretLocal, localFallback, temporal } from './localInterpreter.js';
-import type { Preferences } from './model.js';
-import { validDay } from './recurrence.js';
+import { type Preferences, wallParts } from './model.js';
+import { shiftDay, validDay } from './recurrence.js';
 
 export type AIStatus = { configured: boolean; model: string };
 
@@ -65,18 +66,28 @@ export async function interpretAI(
         : [entry];
     });
   const dates = temporal(text, preferences, now);
+  const planning = planningRequest(text);
+  const planningDay = dates.fields.date || dates.start || wallParts(now, preferences.zone).date;
   const selection = {
-    start: dates.start || dates.fields.date,
-    end: dates.end || dates.fields.date,
-    time: dates.fields.time,
+    start: planning ? planningDay : dates.start || dates.fields.date,
+    end: planning ? shiftDay(planningDay, 7) : dates.end || dates.fields.date,
+    time: planning ? undefined : dates.fields.time,
   };
   const relevant =
     (validDay(selection.start) || selection.time) && (!selection.start || validDay(selection.start))
       ? selectEntries(entries, selection, preferences.zone)
       : [];
+  const limit = planning ? 100 : 60;
+  const ranked = planning
+    ? [...relevant].sort(
+        (a, b) =>
+          Number(b.date === planningDay) - Number(a.date === planningDay) ||
+          a.date.localeCompare(b.date),
+      )
+    : relevant;
   const selected = [
     ...new Map(
-      [...referenced, ...relevant.slice(0, 60)].map((entry) => [entry.id, entry]),
+      [...referenced, ...ranked.slice(0, limit)].map((entry) => [entry.id, entry]),
     ).values(),
   ];
   let response: Response;
@@ -107,10 +118,10 @@ export async function interpretAI(
           ...selection,
           partial: true,
           matchingCount: relevant.length,
-          truncated: relevant.length > 60,
+          truncated: relevant.length > limit,
         },
         entries: selected.map(
-          ({ id, title, type, date, time, completed, important, recurrence }) => ({
+          ({
             id,
             title,
             type,
@@ -119,6 +130,20 @@ export async function interpretAI(
             completed,
             important,
             recurrence,
+            duration,
+            deadline,
+            allDay,
+            atTime,
+          }) => ({
+            id,
+            title,
+            type,
+            date,
+            time,
+            completed,
+            important,
+            recurrence,
+            ...(planning ? { duration, deadline, allDay, atTime } : {}),
           }),
         ),
       }),
@@ -137,7 +162,15 @@ export async function interpretAI(
     throw Object.assign(Error(data?.error || 'ИИ недоступен. Повторите запрос.'), {
       retryable: data?.retryable ?? [408, 429, 500, 502, 503, 504].includes(response.status),
     });
-  return guardCalendarResponse(validateCommand(data?.command));
+  const command = guardCalendarResponse(validateCommand(data?.command));
+  if (planning && command.intent !== planning)
+    throw Error('ИИ не составил план. Уточните пожелания и повторите запрос.');
+  if (planning === 'plan_day') {
+    if (command.start && command.start !== planningDay)
+      throw Error('ИИ выбрал другую дату. Повторите запрос для выбранного дня.');
+    return { ...command, start: planningDay };
+  }
+  return command;
 }
 
 export async function interpretAssistant(...args: Parameters<typeof interpretAI>) {
@@ -145,6 +178,14 @@ export async function interpretAssistant(...args: Parameters<typeof interpretAI>
     guarded = guardCalendarRequest(text, context, +now);
   if (guarded) return guarded;
   signal?.throwIfAborted();
+  const planning = planningRequest(text);
+  if (planning === 'productivity_report') return { intent: planning };
+  if (planning) {
+    const status = await cachedStatus(signal);
+    if (!status?.configured)
+      throw Error('Для умного планирования подключите ИИ. Сейчас календарь не изменён.');
+    return interpretAI(...args);
+  }
   const fallback = localFallback(text, context, preferences, now);
   if (fallback) return fallback;
   const status = await cachedStatus(signal);

@@ -209,7 +209,7 @@ try {
   await command('Runtime.enable');
   await command('Page.enable');
   await command('Page.addScriptToEvaluateOnNewDocument', {
-    source: `const realFetch=window.fetch.bind(window);window.fetch=(input,options)=>String(input).endsWith('/api/assistant')&&(!options?.method||options.method==='GET')?Promise.resolve(new Response(JSON.stringify({configured:false,model:'test-local'}),{headers:{'Content-Type':'application/json'}})):realFetch(input,options);`,
+    source: `const realFetch=window.fetch.bind(window);window.fetch=(input,options)=>{if(!String(input).endsWith('/api/assistant'))return realFetch(input,options);if(!options?.method||options.method==='GET')return Promise.resolve(Response.json({configured:true,model:'test-provider'}));sessionStorage.setItem('test-provider-posts',String(Number(sessionStorage.getItem('test-provider-posts')||0)+1));return Promise.resolve(Response.json({error:'OpenRouter connection denied',retryable:false},{status:502}));};`,
   });
   await command('Page.bringToFront');
   const fixture = [
@@ -458,11 +458,19 @@ try {
   );
   await click('.profile-button');
   await text('Мой профиль');
-  await ev(
-    `(()=>{const canvas=document.createElement('canvas');canvas.width=512;canvas.height=256;canvas.getContext('2d').fillRect(0,0,512,256);const bytes=Uint8Array.from(atob(canvas.toDataURL('image/png').split(',')[1]),c=>c.charCodeAt(0));const d=new DataTransfer();d.items.add(new File([bytes],'avatar.png',{type:'image/png'}));const input=document.querySelector('input[type=file]');input.files=d.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`,
-  );
-  await delay(400);
-  assert.ok(await ev(`localStorage.getItem('voicetask.avatar')?.startsWith('data:image/png')`));
+  for (const [width, height] of [[256, 512], [512, 256], [256, 256]]) {
+    await ev(
+      `(()=>{const canvas=document.createElement('canvas');canvas.width=${width};canvas.height=${height};const ctx=canvas.getContext('2d');ctx.fillStyle='#bb4938';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#296f59';const side=Math.min(canvas.width,canvas.height);ctx.fillRect((canvas.width-side)/2,(canvas.height-side)/2,side,side);ctx.fillStyle='#fff';ctx.font='bold 48px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('Фото',canvas.width/2,canvas.height/2);const bytes=Uint8Array.from(atob(canvas.toDataURL('image/png').split(',')[1]),c=>c.charCodeAt(0));const d=new DataTransfer();d.items.add(new File([bytes],'avatar.png',{type:'image/png'}));const input=document.querySelector('input[type=file]');input.files=d.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`,
+    );
+    await delay(400);
+    assert.ok(await ev(`localStorage.getItem('voicetask.avatar')?.startsWith('data:image/png')`));
+    const frames = await ev(`Array.from(document.querySelectorAll('.avatar')).map(frame=>{const box=frame.getBoundingClientRect();const image=frame.querySelector('img')?.getBoundingClientRect();return {width:box.width,height:box.height,contained:!!image&&image.left>=box.left&&image.top>=box.top&&image.right<=box.right&&image.bottom<=box.bottom};})`);
+    for (const frame of frames) {
+      assert.equal(frame.width, frame.height, 'the avatar frame remains circular for every photo shape');
+      assert.ok(frame.contained, 'portrait and landscape photos stay inside their avatar frames');
+    }
+    if (height > width) await captureModal('profile-portrait-cropped');
+  }
   await close();
   await reload();
   assert.ok(await ev(`!!document.querySelector('.profile-button img')`));
@@ -541,6 +549,20 @@ try {
     await fill('[aria-label="Сообщение ассистенту"]', value);
     await click('[aria-label="Отправить сообщение"]');
   };
+  await chat('задача Подготовить презентацию; завтра; 14:00');
+  const structured = (await stored()).find((entry) => entry.title === 'Подготовить презентацию');
+  assert.ok(structured, 'the reported structured task is saved while the provider denies access');
+  assert.equal(structured.time, '14:00');
+  assert.equal(structured.atTime, true);
+  await chat('Создай встречу Проверка календаря на этот четверг в 14:30');
+  const weekdayMeeting = (await stored()).find((entry) => entry.title === 'проверка календаря');
+  assert.ok(weekdayMeeting, 'the weekday modifier is not included in the meeting title');
+  await chat('удали встречу на этот четверг в 14:30');
+  assert.ok((await stored()).some((entry) => entry.id === weekdayMeeting.id),
+    'a weekday deletion must still wait for confirmation');
+  assert.ok(await ev(`document.querySelector('.messages').textContent.includes('Ответьте «Да» или «Нет»')`));
+  await chat('Да');
+  assert.ok(!(await stored()).some((entry) => entry.id === weekdayMeeting.id));
   await chat('Создай задачу Браузерная проверка завтра');
   let natural = (await stored()).find((e) => e.title === 'браузерная проверка');
   assert.ok(natural.allDay);
@@ -786,6 +808,8 @@ try {
     `localStorage.setItem('voicetask.entries.v1',${JSON.stringify(JSON.stringify(beforeFailure))})`,
   );
   assert.deepEqual(errors, [], 'no runtime errors');
+  assert.equal(await ev(`Number(sessionStorage.getItem('test-provider-posts')||0)`), 0,
+    'ordinary commands never reach the unavailable provider');
   console.log(
     'Browser checks passed: 4 calendar modes, task/meeting CRUD, validation, custom color, multiday segments, completion toggle, global search/comments/keyboard/Escape, day/detail dialogs, year dots, filters, settings/date format/timezone/theme/text/density/reload, profile name, chat persistence, legacy backup/unknown record, overdue once and bell, desktop/mobile overflow.',
   );

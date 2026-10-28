@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Check, Palette, Pipette } from 'lucide-react';
 import { type Entry, colors, entryTypes, entryColor, validEntry, validColor } from './calendar';
 import { commentOf, endParts, toInstant, wallParts } from './model';
-import { validRecurrence } from './recurrence';
+import { validRecurrence, validDay } from './recurrence';
 export default function EntryForm({
   initial,
   exists,
@@ -105,6 +105,8 @@ export default function EntryForm({
     const e: Record<string, string> = {};
     if (!entry.title.trim()) e.title = 'Введите название';
     if (!validColor(entry.color)) e.color = 'Выберите цвет в формате #RRGGBB';
+    if (entry.deadline && (!validDay(entry.deadline) || entry.date > entry.deadline))
+      e.deadline = 'Срок должен быть не раньше запланированной даты';
     if (
       entry.recurrence &&
       (!validRecurrence(entry.recurrence) ||
@@ -284,6 +286,17 @@ export default function EntryForm({
         </>
       )}
       {error('end')}
+      {entry.type === 'task' && (
+        <label>
+          Крайний срок (необязательно)
+          <input
+            type="date"
+            value={entry.deadline || ''}
+            onChange={(e) => change({ deadline: e.target.value || undefined })}
+          />
+          {error('deadline')}
+        </label>
+      )}
       <label>
         Повторение
         <select

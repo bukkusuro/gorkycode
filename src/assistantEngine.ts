@@ -12,6 +12,8 @@ import {
 } from './model.js';
 import { isNumericInput, numericParts } from './numericInput.js';
 import { changeOccurrence, expandEntries, nextOccurrence, validRecurrence } from './recurrence.js';
+import { proposePlan, describePlan, type PlanProposal } from './planning/plan.js';
+import { productivityText } from './planning/analytics.js';
 export type Outcome = {
   reply: string;
   context: Context;
@@ -19,6 +21,7 @@ export type Outcome = {
   entries?: Entry[];
   openId?: string;
   numericChoiceId?: string;
+  proposal?: PlanProposal;
 };
 export type Interpreter = (
   text: string,
@@ -124,6 +127,7 @@ function applyFields(
     'color',
     'allDay',
     'recurrence',
+    'deadline',
   ] as const)
     if (fields[key] !== undefined) Object.assign(next, { [key]: fields[key] });
   if (base.allDay && fields.time && !fields.duration) next.duration = 60;
@@ -204,6 +208,21 @@ export function executeCommand(
     context,
     ...extra,
   });
+  if (command.intent === 'productivity_report')
+    return {
+      reply: productivityText(records, preferences.zone, now),
+      context: { updatedAt: +now },
+    };
+  if (command.intent === 'create_batch' || command.intent === 'plan_day') {
+    const proposal = proposePlan(command, records, preferences, requestId, now);
+    return {
+      reply: proposal.rows.length
+        ? describePlan(proposal)
+        : 'Нет задач, которые можно перепланировать. ' + proposal.warnings.join('\n'),
+      context: { updatedAt: +now },
+      ...(proposal.rows.length ? { proposal } : {}),
+    };
+  }
   if (command.intent === 'cancel_action') {
     return { reply: 'Действие отменено. Записи не изменены.', context: { updatedAt: +now } };
   }
@@ -470,6 +489,7 @@ export function executeCommand(
       'startAt',
       'endAt',
       'recurrence',
+      'deadline',
     ] as const)
       if (updated[k] !== selected[k]) Object.assign(patch, { [k]: updated[k] });
   }

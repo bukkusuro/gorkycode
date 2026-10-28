@@ -245,6 +245,22 @@ test('provider errors are clear and do not return upstream content or reasoning'
   }
 });
 
+test('a connection policy rejection is distinguished from denied model access', async (t) => {
+  const { post } = await serve(t, {
+    fetchImpl: async () =>
+      Response.json(
+        { success: false, error: 'Access denied by security policy.' },
+        { status: 403 },
+      ),
+  });
+  const response = await post();
+  assert.equal(response.status, 502);
+  const body = await response.json();
+  assert.match(body.error, /Серверу приложения закрыт доступ к OpenRouter/);
+  assert.doesNotMatch(body.error, /доступ к модели/);
+  assert.equal(body.retryable, false);
+});
+
 test('invalid or truncated model responses never become commands', async (t) => {
   for (const response of [
     completion('not json'),

@@ -8,6 +8,7 @@ import {
   Trash2,
   Undo2,
   X,
+  ChartNoAxesCombined,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type Entry, dateKey, entryTypes, fromKey, validEntry } from './calendar';
@@ -27,11 +28,12 @@ import { useReminders } from './reminders/useReminders';
 import SettingsPanel from './SettingsPanel';
 import { useCalendarStore } from './storage/useCalendarStore';
 import { useDialogFocus } from './ui/useDialogFocus';
+import AnalyticsPanel from './planning/AnalyticsPanel';
 type View =
   | { kind: 'edit'; entry: Entry }
   | { kind: 'detail'; id: string }
   | { kind: 'day'; day: string }
-  | { kind: 'settings' | 'profile' | 'period' }
+  | { kind: 'settings' | 'profile' | 'period' | 'analytics' }
   | null;
 function loadSetting(key: string, fallback: string) {
   try {
@@ -276,6 +278,7 @@ export default function App() {
         records={records}
         entries={entries}
         prefs={prefs}
+        selectedDay={dateKey(date)}
         commit={commit}
         persist={persist}
         onResults={onChatResults}
@@ -288,6 +291,14 @@ export default function App() {
             Ваш календарь<span>.</span>
           </h1>
           <div ref={actionsRef} className="header-actions">
+            <button
+              className="icon-button"
+              aria-label="Аналитика выполнения задач"
+              title="Аналитика выполнения задач"
+              onClick={() => setView({ kind: 'analytics' })}
+            >
+              <ChartNoAxesCombined size={26} />
+            </button>
             <button
               className="icon-button"
               aria-label="Отменить последнее действие"
@@ -508,6 +519,7 @@ export default function App() {
                   )}
                   {detail.recurrence ? ' · Повторяется' : ''}
                 </p>
+                {detail.deadline && <p>Срок: {dateLabel(detail.deadline, prefs.dateFormat)}</p>}
                 <p>
                   {dateLabel(detail.date, prefs.dateFormat)}{' '}
                   {detail.allDay
@@ -611,6 +623,7 @@ export default function App() {
               />
             )}
             {view.kind === 'profile' && <ProfilePanel profile={profile} />}
+            {view.kind === 'analytics' && <AnalyticsPanel records={records} prefs={prefs} />}
           </div>
         </div>
       )}

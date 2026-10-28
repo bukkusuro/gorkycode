@@ -99,7 +99,7 @@ export function createReminderMiddleware({
           item.body.length > 500 ||
           typeof item.sound !== 'boolean' ||
           (item.entryId !== undefined &&
-            (typeof item.entryId !== 'string' || !/^[\w@.-]{1,200}$/.test(item.entryId)))
+            (typeof item.entryId !== 'string' || !/^[\w:@.-]{1,200}$/.test(item.entryId)))
         )
           throw fail(400, 'Некорректное напоминание.');
       const owner = createHash('sha256')

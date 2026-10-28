@@ -139,7 +139,12 @@ export default function SettingsPanel({
         role="switch"
         aria-label={title}
         checked={p[key]}
-        onChange={(e) => set(key, e.target.checked)}
+        onChange={(e) => {
+          if (key === 'background' && e.target.checked) {
+            update({ ...p, enabled: true, background: true });
+            void background.enable();
+          } else set(key, e.target.checked);
+        }}
       />
     </label>
   );
@@ -400,14 +405,32 @@ export default function SettingsPanel({
               <section className="settings-card">
                 {toggle(
                   'background',
-                  'Фоновые напоминания Windows',
+                  background.mode === 'native'
+                    ? 'Фоновые напоминания Windows'
+                    : 'Фоновые уведомления',
                   'Получать уведомления даже при закрытой вкладке',
                 )}
                 {p.background && (
                   <div className="background-reminders">
+                    {background.mode === 'web' && background.needsPermission && (
+                      <button
+                        type="button"
+                        disabled={background.busy || !background.available}
+                        onClick={() => {
+                          update({ ...p, enabled: true, background: true });
+                          void background.enable();
+                        }}
+                      >
+                        Разрешить уведомления
+                      </button>
+                    )}
                     <button
                       type="button"
-                      disabled={background.busy || !background.available}
+                      disabled={
+                        background.busy ||
+                        !background.available ||
+                        (background.mode === 'web' && background.needsPermission)
+                      }
                       onClick={() => void background.test()}
                     >
                       Проверить уведомление
@@ -415,12 +438,24 @@ export default function SettingsPanel({
                     <p role="status">
                       {background.busy
                         ? 'Настраиваю уведомления…'
-                        : background.ready
-                          ? `Запланировано: ${background.scheduled}`
-                          : !background.available
-                            ? 'Откройте приложение через START.cmd в Windows.'
-                            : 'Включите уведомления, чтобы запланировать напоминания.'}
+                        : background.message
+                          ? background.message
+                          : background.ready
+                            ? `Запланировано: ${background.scheduled}`
+                            : !background.available
+                              ? 'Фоновые уведомления недоступны.'
+                              : background.needsPermission
+                                ? 'Нажмите «Разрешить уведомления» и подтвердите запрос браузера.'
+                                : background.error
+                                  ? 'Не удалось обновить расписание уведомлений.'
+                                  : 'Включите уведомления, чтобы запланировать напоминания.'}
                     </p>
+                    {background.mode === 'web' && (
+                      <p>
+                        Уведомления приходят при закрытой вкладке. Разрешите браузеру работу в фоне
+                        и уведомления в настройках системы.
+                      </p>
+                    )}
                     {background.error && (
                       <p className="field-error" role="alert">
                         {background.error}

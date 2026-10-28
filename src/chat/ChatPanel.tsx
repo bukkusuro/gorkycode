@@ -1,9 +1,14 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { ArrowUp, ChevronRight, CircleHelp, Mic, Plus, Square, Trash2 } from 'lucide-react';
 import { assistantText } from '../assistantTypes';
 import { type ChatOptions, useAssistantChat } from './useAssistantChat';
+import { wallParts } from '../model';
+import { validDay } from '../recurrence';
 export default memo(function ChatPanel(props: ChatOptions) {
   const { prefs, onOpenEntry } = props;
+  const today = wallParts(new Date(), prefs.zone).date;
+  const [choosingDay, setChoosingDay] = useState(false);
+  const [planDay, setPlanDay] = useState(today);
   const {
     input,
     chatBlocked,
@@ -20,6 +25,7 @@ export default memo(function ChatPanel(props: ChatOptions) {
     revise,
     canBack,
     canRevise,
+    proposal,
   } = useAssistantChat(props);
   return (
     <aside className="assistant-panel">
@@ -75,6 +81,28 @@ export default memo(function ChatPanel(props: ChatOptions) {
                     ))}
                   </div>
                 )}
+                {m.proposalId && (
+                  <div
+                    className="chat-choices plan-actions"
+                    role="group"
+                    aria-label="Подтверждение плана"
+                  >
+                    <button
+                      type="button"
+                      disabled={busy || proposal?.id !== m.proposalId}
+                      onClick={() => void sendMessage('Применить план', undefined, m.proposalId)}
+                    >
+                      Применить план
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy || proposal?.id !== m.proposalId}
+                      onClick={() => void sendMessage('Отменить план', undefined, m.proposalId)}
+                    >
+                      Отмена
+                    </button>
+                  </div>
+                )}
                 <small>
                   {m.role === 'assistant' ? 'Вокса' : 'Вы'}
                   {m.at && (
@@ -128,6 +156,62 @@ export default memo(function ChatPanel(props: ChatOptions) {
           <div ref={messageEnd} />
         </div>
         <div className="chat-compose">
+          <div className="planning-shortcuts" aria-label="Планирование и аналитика">
+            <button
+              disabled={busy}
+              aria-expanded={choosingDay}
+              aria-controls="planning-day-picker"
+              onClick={() => {
+                setPlanDay(props.selectedDay >= today ? props.selectedDay : today);
+                setChoosingDay(!choosingDay);
+              }}
+            >
+              Перестроить день
+            </button>
+            <button
+              disabled={busy}
+              onClick={() => void sendMessage('Покажи недельный отчёт по выполнению задач')}
+            >
+              Отчёт за неделю
+            </button>
+          </div>
+          {choosingDay && (
+            <form
+              id="planning-day-picker"
+              className="planning-day-picker"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (busy || !validDay(planDay) || planDay < today) return;
+                setChoosingDay(false);
+                void sendMessage(
+                  `Перестрой расписание на ${planDay} так, чтобы я закончил самое важное`,
+                );
+              }}
+            >
+              <label>
+                Какой день перестроить?
+                <input
+                  type="date"
+                  aria-label="Дата перепланирования"
+                  value={planDay}
+                  min={today}
+                  required
+                  autoFocus
+                  disabled={busy}
+                  onChange={(event) => setPlanDay(event.target.value)}
+                />
+              </label>
+              <span className="hint">Сегодня или любой будущий день.</span>
+              <div className="chat-choices">
+                <button type="submit" disabled={busy || !validDay(planDay) || planDay < today}>
+                  Предложить план
+                </button>
+                <button type="button" onClick={() => setChoosingDay(false)}>
+                  Отмена
+                </button>
+              </div>
+            </form>
+          )}
           {chatBlocked && (
             <p className="field-error" role="alert">
               Сохранённая история повреждена или недоступна. Исходные данные оставлены без

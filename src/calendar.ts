@@ -28,6 +28,9 @@ export type Entry = {
   operationId?: string;
   importKey?: string;
   importedAt?: string;
+  deadline?: string;
+  completedAt?: string;
+  activityAt?: string;
 };
 
 export const colors = ['#ddd8f5', '#d8eae2', '#f7e5cf', '#d7e7f8', '#f2dce1'];
@@ -87,6 +90,16 @@ export function formatDate(date: Date, options: Intl.DateTimeFormatOptions) {
 export function validEntry(value: unknown): value is Entry {
   if (!value || typeof value !== 'object') return false;
   const v = value as Entry;
+  if (
+    v.deadline !== undefined &&
+    (typeof v.deadline !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(v.deadline) ||
+      dateKey(fromKey(v.deadline)) !== v.deadline)
+  )
+    return false;
+  for (const stamp of [v.completedAt, v.activityAt])
+    if (stamp !== undefined && (typeof stamp !== 'string' || !Number.isFinite(Date.parse(stamp))))
+      return false;
   if (typeof v.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v.date)) return false;
   const date = fromKey(v.date);
   if (!(

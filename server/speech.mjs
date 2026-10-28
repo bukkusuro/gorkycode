@@ -2,7 +2,7 @@ import { assertSameOrigin, sendJSON, readBody } from './http.mjs';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, rmdir, unlink, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { availableParallelism, tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -11,8 +11,11 @@ const fail = (status, message) => Object.assign(Error(message), { status });
 const files = (root) => {
   const folder = join(root, '.tools', 'speech');
   return {
-    binary: join(folder, 'bin', 'Release', 'whisper-cli.exe'),
-    model: join(folder, 'ggml-small-q5_1.bin'),
+    binary:
+      process.platform === 'win32'
+        ? join(folder, 'bin', 'Release', 'whisper-cli.exe')
+        : join(folder, 'bin', 'whisper-cli'),
+    model: join(folder, process.env.WHISPER_MODEL || 'ggml-small-q5_1.bin'),
     vad: join(folder, 'ggml-silero-v5.1.2.bin'),
   };
 };
@@ -39,7 +42,7 @@ export function validateAudio(audio) {
 export async function transcribeAudio(audio, { root = process.cwd(), signal } = {}) {
   const config = files(root);
   if (!Object.values(config).every(existsSync))
-    throw fail(503, 'Распознавание не установлено. Запустите START.cmd.');
+    throw fail(503, 'Распознавание речи не установлено на сервере.');
   const folder = await mkdtemp(join(tmpdir(), 'voxa-speech-'));
   const input = join(folder, 'recording.wav'),
     output = join(folder, 'result');
@@ -55,7 +58,7 @@ export async function transcribeAudio(audio, { root = process.cwd(), signal } = 
         '-l',
         'ru',
         '-t',
-        '4',
+        String(Math.min(4, availableParallelism())),
         '-ng',
         '--vad',
         '-vm',

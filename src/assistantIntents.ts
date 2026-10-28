@@ -13,4 +13,7 @@ export const assistantIntents = [
   'confirm_action',
   'cancel_action',
   'answer_question',
+  'create_batch',
+  'plan_day',
+  'productivity_report',
 ] as const;

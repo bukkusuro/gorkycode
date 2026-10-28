@@ -1,0 +1,28 @@
+[Unit]
+Description=Voksa calendar API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sdevs
+Group=sdevs
+WorkingDirectory=/opt/voicetask/current
+ExecStart=/opt/voicetask/node/bin/node --use-env-proxy server/index.mjs
+EnvironmentFile=-/opt/voicetask/shared/proxy.env
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=3000
+Environment=WHISPER_MODEL=ggml-base-q5_1.bin
+Environment=PUSH_REMINDERS_DIR=/opt/voicetask/shared/push
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/voicetask/shared/push
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

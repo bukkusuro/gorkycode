@@ -137,6 +137,10 @@ test('reminder API isolates owners, validates input, serializes native work and 
     await Promise.all([post('browser-a', [item]), post('browser-b', [item])]);
     assert.notEqual(calls[0].owner, calls[1].owner);
     assert.equal(maxActive, 1);
+    assert.equal(
+      (await post('browser-imported', [{ ...item, entryId: 'csv:imported@2026-10-29' }])).status,
+      200,
+    );
     assert.equal((await post('bad!', [])).status, 400);
     assert.equal((await post('browser-a', [{ ...item, entryId: '../bad' }])).status, 400);
     await post('browser-a', []);

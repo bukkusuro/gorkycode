@@ -297,6 +297,8 @@ main {
   white-space: nowrap;
 }
 .avatar {
+  position: relative;
+  overflow: hidden;
   width: 35px;
   height: 35px;
   border: 3px solid #f3efe8;
@@ -1274,6 +1276,9 @@ main,
   color: var(--ink);
 }
 .avatar img {
+  position: absolute;
+  inset: 0;
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -3388,4 +3393,105 @@ main,
     height: 42px;
     font-size: 17px;
   }
+}
+
+.planning-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-bottom: 10px;
+}
+.planning-shortcuts button {
+  border: 1px solid var(--border, #e4ddd5);
+  border-radius: 16px;
+  padding: 6px 10px;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+}
+.plan-actions {
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+.plan-actions button:first-child {
+  background: var(--accent);
+  color: white;
+}
+.analytics-totals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 20px 0;
+}
+.analytics-totals article {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--border, #e4ddd5);
+  border-radius: 12px;
+  padding: 16px;
+}
+.analytics-totals strong {
+  color: var(--accent);
+  font-size: 32px;
+}
+.analytics-totals progress {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.analytics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.analytics-table th,
+.analytics-table td {
+  padding: 9px 5px;
+  text-align: left;
+  border-bottom: 1px solid var(--border, #e4ddd5);
+}
+.analytics-panel p {
+  line-height: 1.6;
+}
+@media (max-width: 480px) {
+  .analytics-totals {
+    grid-template-columns: 1fr;
+  }
+  .analytics-table {
+    font-size: 12px;
+  }
+}
+.analytics-details {
+  margin-top: 16px;
+}
+.analytics-details summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.chat-compose .planning-day-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 12px;
+}
+.planning-day-picker label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+}
+.planning-day-picker input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+.planning-day-picker .hint {
+  margin: 0;
+  font-size: 12px;
 }

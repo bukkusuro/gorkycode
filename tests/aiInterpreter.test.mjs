@@ -274,6 +274,38 @@ test('ordinary commands finish without waiting on any provider', async () => {
   }
 });
 
+test('structured creation commands save locally even when the provider rejects access', async () => {
+  globalThis.fetch = async () => assert.fail('A validated structured command reached the network');
+  for (const [text, type, title, date, time, duration, important] of [
+    ['задача Подготовить презентацию; завтра; 14:00', 'task', 'Подготовить презентацию', '2026-10-22', '14:00', 0, false],
+    ['встреча План на завтра и отчёт 2027; сегодня; 10:00; 30; важно', 'meeting', 'План на завтра и отчёт 2027', '2026-10-21', '10:00', 30, true],
+    ['событие Концерт; 2026-12-31; 18:00', 'event', 'Концерт', '2026-12-31', '18:00', 0, false],
+  ]) {
+    const result = await resilientRequest(text);
+    assert.equal(result.records.length, 1, text);
+    const saved = result.records[0];
+    assert.equal(saved.type, type);
+    assert.equal(saved.title, title);
+    assert.equal(saved.date, date);
+    assert.equal(saved.time, time);
+    assert.equal(saved.duration, duration);
+    assert.equal(saved.important, important);
+    assert.equal(saved.atTime, duration === 0);
+    assert.match(result.reply, /Сохранено/);
+  }
+});
+
+test('invalid or multiple structured commands are not executed as a local creation', async () => {
+  const calls = unavailable(502, false);
+  for (const text of [
+    'задача Отчёт; завтра; 25:00',
+    'задача Отчёт; завтра; 10:00; задача Звонок; завтра; 11:00',
+  ]) {
+    await assert.rejects(() => resilientRequest(text), /Provider unavailable/);
+  }
+  assert.equal(calls(), 2);
+});
+
 test('network failures and incomplete response bodies use the same fallback', async () => {
   for (const fail of [
     () => {

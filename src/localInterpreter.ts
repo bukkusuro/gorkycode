@@ -115,7 +115,10 @@ export function temporal(text: string, prefs: Preferences, now: Date) {
     }
     for (const stem of weekdays)
       rest = rest.replace(
-        new RegExp(`(?:в |к |по |кажд[а-я]* |следующ[а-я]* |перв[а-я]* )?${stem}[а-я]*`, 'gu'),
+        new RegExp(
+          `(?:(?:в|во|на|к|ко|по)\\s+)?(?:(?:эт[а-я]*|ближайш[а-я]*|кажд[а-я]*|следующ[а-я]*|перв[а-я]*)\\s+)?${stem}[а-я]*`,
+          'gu',
+        ),
         ' ',
       );
     rest = rest.replace(/месяца|еженедельно/gu, ' ');
@@ -212,6 +215,8 @@ export function localFallback(text: string, context: Context, prefs: Preferences
   if (context.awaitingScope && command.scope) return command;
   if (context.pending?.answer === 'comment' && command.fields?.comment !== undefined)
     return command;
+  // The semicolon format has already passed the strict parser in interpretLocal.
+  if (normalized.includes(';') && command.intent.startsWith('create')) return command;
   const temporalWords =
       /сегодня|завтра|вчера|недел|месяц|понедельник|вторник|сред[ау]|четверг|пятниц|суббот|воскресень|через|январ|феврал|март|апрел|ма[йяе](?=\s|$)|июн|июл|август|сентябр|октябр|ноябр|декабр|\d/iu,
     quotes = normalized.match(/«[^»]*»|"[^"]*"|'[^']*'/gu) || [],

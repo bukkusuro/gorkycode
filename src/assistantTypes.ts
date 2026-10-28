@@ -14,6 +14,7 @@ export type Fields = {
   color?: string;
   allDay?: boolean;
   recurrence?: Recurrence;
+  deadline?: string;
 };
 export type Intent = (typeof intents)[number];
 export type Command = {
@@ -30,6 +31,8 @@ export type Command = {
   free?: boolean;
   scope?: Scope;
   answer?: string;
+  items?: { type: Entry['type']; fields: Fields }[];
+  priorities?: string[];
 };
 export type Context = {
   updatedAt?: number;
@@ -51,6 +54,7 @@ export type ChatMessage = {
   retry?: string;
   entryIds?: string[];
   numericChoiceId?: string;
+  proposalId?: string;
 };
 const commandKeys = [
   'intent',
@@ -66,6 +70,8 @@ const commandKeys = [
   'free',
   'scope',
   'answer',
+  'items',
+  'priorities',
 ];
 const fieldKeys = [
   'title',
@@ -79,6 +85,7 @@ const fieldKeys = [
   'color',
   'allDay',
   'recurrence',
+  'deadline',
 ];
 const object = (x: unknown): x is Record<string, unknown> =>
   !!x && typeof x === 'object' && !Array.isArray(x);
@@ -87,6 +94,42 @@ const keys = (x: Record<string, unknown>, allowed: string[]) =>
 export function validateCommand(raw: unknown): Command {
   if (!object(raw) || !keys(raw, commandKeys) || !intents.includes(raw.intent as Intent))
     throw Error('Недопустимая команда ассистента.');
+  if (raw.items !== undefined) {
+    if (
+      raw.intent !== 'create_batch' ||
+      !Array.isArray(raw.items) ||
+      !raw.items.length ||
+      raw.items.length > 20
+    )
+      throw Error('В одном плане должно быть от 1 до 20 записей.');
+    for (const item of raw.items) {
+      if (
+        !object(item) ||
+        !keys(item, ['type', 'fields']) ||
+        !Object.hasOwn(entryTypes, String(item.type)) ||
+        !object(item.fields)
+      )
+        throw Error('Недопустимая запись плана.');
+      validateCommand({ intent: `create_${item.type}`, fields: item.fields });
+      if (
+        typeof item.fields.title !== 'string' ||
+        !item.fields.title.trim() ||
+        item.fields.recurrence
+      )
+        throw Error(
+          'Каждой записи плана нужно название. Повторения добавляйте отдельной командой.',
+        );
+    }
+  }
+  if (raw.intent === 'create_batch' && !raw.items) throw Error('Список записей пуст.');
+  if (
+    raw.priorities !== undefined &&
+    (raw.intent !== 'plan_day' ||
+      !Array.isArray(raw.priorities) ||
+      raw.priorities.length > 100 ||
+      raw.priorities.some((id) => typeof id !== 'string' || id.length > 200))
+  )
+    throw Error('Некорректный список приоритетов.');
   for (const k of ['query', 'id', 'answer'])
     if (raw[k] !== undefined && (typeof raw[k] !== 'string' || (raw[k] as string).length > 4000))
       throw Error('Недопустимый текст команды.');
@@ -112,7 +155,7 @@ export function validateCommand(raw: unknown): Command {
     if (!object(raw.fields) || !keys(raw.fields, fieldKeys))
       throw Error('Недопустимые поля записи.');
     const f = raw.fields;
-    for (const k of ['date', 'endDate'])
+    for (const k of ['date', 'endDate', 'deadline'])
       if (f[k] !== undefined && !validDay(f[k])) throw Error('Некорректная дата.');
     for (const k of ['time', 'endTime'])
       if (f[k] !== undefined && !validTime(f[k])) throw Error('Некорректное время.');
